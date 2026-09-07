@@ -1,6 +1,6 @@
 # PromptBI Studio
 
-**Built by Ackrad Shimwense**
+**Built by Ackrad Seth Chisale**
 
 PromptBI Studio turns a plain-language analysis request into a visible, validated plan, runs the approved analysis, builds interactive dashboards, and prepares data for Tableau. The core analysis works locally without a Tableau license; Hyper and publishing support are optional delivery steps.
 
