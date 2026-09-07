@@ -1,63 +1,145 @@
-# PromptBI Studio 1.0
+# PromptBI Studio
 
-PromptBI Studio is a local, editable Python application that converts a plain-language analytics
-request into a reviewable plan, executes the approved plan, produces interactive dashboards and
-analysis tables, and prepares data for Tableau.
+**Built by Ackrad Shimwense**
 
-It is deliberately vendor-flexible: the analysis and interactive HTML dashboard work without a
-Tableau license. Tableau-specific delivery is added at the end.
+PromptBI Studio turns a plain-language analysis request into a visible, validated plan, runs the approved analysis, builds interactive dashboards, and prepares data for Tableau. The core analysis works locally without a Tableau license; Hyper and publishing support are optional delivery steps.
 
-## How I use it
+![PromptBI operations dashboard using fictional sample data](docs/images/promptbi-dashboard.png)
 
-I load a real operations table and write what I would normally ask an analyst: “Compare cost and
-production by region, show the drivers, forecast the next six periods, and rank the priorities.”
-The application first turns that sentence into a visible plan. Nothing runs until the columns and
-assumptions have been checked.
+*The dashboard above uses fictional operations data to demonstrate descriptive, predictive and prescriptive outputs.*
+
+## Project summary
+
+| User starts with | PromptBI produces |
+|---|---|
+| CSV, Excel, Parquet, JSON or JSONL | Cleaned schema and completeness profile |
+| A written business question | Reviewable JSON analysis plan |
+| Approved dimensions, measures and target | Descriptive, diagnostic, predictive and prescriptive tables |
+| Chart requirements | Interactive Plotly dashboard and optional PNGs |
+| Tableau delivery requirement | Hyper extract or reviewed publication package |
+
+## Why this matters
+
+Many dashboard requests begin clearly in business language but become disconnected from the data during implementation. Someone asks to “compare cost and production, identify the drivers, forecast next quarter and recommend priorities,” yet the file may not contain the requested columns, the forecast may be too weak, or a recommendation may ignore costs and constraints.
+
+PromptBI keeps the request, data schema, chosen methods, warnings and outputs connected. It is useful in operations, manufacturing, energy, mining, logistics, finance, sales, project controls and any team that repeatedly turns flat files into decision-support dashboards.
+
+## The solution
 
 ```mermaid
 flowchart LR
     A[CSV, Excel, Parquet or JSON] --> B[Profile and clean schema]
-    B --> C[Reviewable analysis plan]
-    C --> D[Descriptive and diagnostic work]
-    C --> E[Predictive and prescriptive screens]
-    D --> F[Interactive dashboard]
-    E --> F
-    F --> G[HTML, CSV, Hyper or Tableau publish]
+    B --> C[Prompt to analysis plan]
+    C --> D[Validate every referenced column]
+    D --> E[User reviews plan]
+    E --> F[Run selected modules]
+    F --> G[Interactive dashboard]
+    F --> H[Analysis tables and findings]
+    G --> I[HTML, PNG, Hyper or Tableau]
+    H --> I
 ```
 
-The offline planner is ordinary, inspectable Python. For example, analysis types are added only
-when the request actually asks for them:
+The plan is shown before execution. If a requested field does not exist, validation stops the run instead of inventing a column.
+
+## Analysis modes
+
+- **Descriptive:** profiles, grouped KPIs, distributions and missingness.
+- **Diagnostic:** correlations and outlier screens with causality warnings.
+- **Predictive:** random-forest holdout evaluation and baseline time-trend forecasts.
+- **Prescriptive:** observed-data rankings and candidate identification with explicit limits.
+- **Visual:** bar, line, area, scatter, histogram, box, pie, treemap, sunburst, heatmap and coordinate maps.
+
+## Code behind the workflow
+
+### One pipeline from approved plan to deliverables
 
 ```python
-analyses = ["descriptive"]
-if any(word in text for word in ("why", "driver", "correlation", "diagnostic")):
-    analyses.append("diagnostic")
-if any(word in text for word in ("forecast", "predict", "projection", "trend")):
-    analyses.append("predictive")
-if any(word in text for word in ("recommend", "optimize", "prescriptive", "scenario")):
-    analyses.append("prescriptive")
+def run_analysis(frame, prompt, plan=None):
+    selected = plan or deterministic_plan(prompt, frame)
+    selected.validate(list(frame.columns))
+
+    outputs = run_modules(frame, selected)
+    figures = []
+    for spec in selected.charts:
+        try:
+            figures.append(create_figure(frame, spec))
+        except (ValueError, TypeError) as exc:
+            outputs.warnings.append(
+                f"Chart {spec.title or spec.kind!r} skipped: {exc}"
+            )
+    return AnalysisResult(selected, outputs, figures)
 ```
 
-## Capabilities
+### Reproducible predictive evaluation
 
-- CSV, Excel, Parquet, JSON, and JSONL input.
-- Automatic column cleaning, type inspection, completeness profiling, and schema display.
-- Deterministic offline prompt planner, plus an optional OpenAI-compatible LLM planner.
-- The plan is shown as JSON and must be reviewed before execution.
-- Descriptive summaries, grouped KPIs, missingness, and distributions.
-- Diagnostic correlation and outlier screening with explicit causality warnings.
-- Predictive random-forest holdout evaluation and baseline time-trend forecasts.
-- Prescriptive screening/ranking with explicit decision limitations.
-- Bar, line, area, scatter, histogram, box, pie, treemap, sunburst, heatmap, and coordinate maps.
-- Responsive interactive HTML dashboard and downloadable CSV/JSON analysis package.
-- Optional PNG exports through Kaleido.
-- Tableau `.hyper` extract creation with the official Hyper API.
-- PAT-authenticated datasource/workbook publishing to Tableau Cloud or Tableau Server.
-- Tableau Public review package for manual publication.
+```python
+x_train, x_test, y_train, y_test = train_test_split(
+    clean[features], clean[target],
+    test_size=0.25,
+    random_state=42,
+)
+model = RandomForestRegressor(
+    n_estimators=150,
+    random_state=42,
+    n_jobs=-1,
+)
+model.fit(x_train, y_train)
+predicted = model.predict(x_test)
 
-## Start in VS Code on Windows
+metrics = {
+    "holdout_mae": float(mean_absolute_error(y_test, predicted)),
+    "holdout_r2": float(r2_score(y_test, predicted)),
+}
+```
 
-Open this folder in VS Code, then run:
+### Prescriptive output stays honest about its limits
+
+```python
+ranking = frame.groupby(dimension, dropna=False)[target].agg(
+    ["sum", "mean", "median", "count"]
+).reset_index()
+ranking["rank_by_mean"] = ranking["mean"].rank(
+    ascending=False, method="dense"
+).astype(int)
+
+warnings.append(
+    "Recommendations rank observed data only; add real costs, constraints, "
+    "uncertainty and decision authority before action."
+)
+```
+
+### Every run writes reviewable artifacts
+
+```python
+(root / "analysis_plan.json").write_text(
+    json.dumps(self.plan.to_dict(), indent=2), encoding="utf-8"
+)
+
+for name, table in self.outputs.tables.items():
+    table.to_csv(root / "tables" / f"{name}.csv", index=False)
+
+write_dashboard(
+    root / "dashboard.html",
+    self.figures,
+    self.plan.goal,
+    self.outputs.findings,
+    self.outputs.warnings,
+)
+```
+
+## Technology used
+
+- Python and pandas for data loading, profiling and transformation
+- Streamlit for the local interactive application
+- Plotly for interactive charts and dashboard generation
+- NumPy and scikit-learn for diagnostic/predictive modules
+- Tableau Hyper API for extract creation
+- Tableau Server Client/REST API for licensed Cloud or Server publication
+- Deterministic offline planner with an optional OpenAI-compatible language-planning adapter
+- JSON plans, CSV analysis tables and self-contained HTML output
+- PyArrow/openpyxl adapters for Parquet and Excel workflows
+
+## Run in VS Code
 
 ```powershell
 py -3.11 -m venv .venv
@@ -66,10 +148,7 @@ py -3.11 -m venv .venv
 .\.venv\Scripts\python.exe -m streamlit run app.py
 ```
 
-Open the local URL printed by Streamlit. Alternatively, press **F5** and choose
-**PromptBI Studio** after selecting the `.venv` interpreter.
-
-If Tableau libraries are not needed, install the base app with:
+For the analysis application without Tableau extras:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
@@ -81,64 +160,53 @@ If Tableau libraries are not needed, install the base app with:
 $env:PYTHONPATH = (Resolve-Path .\src).Path
 python -m promptbi.cli examples\sample_operations.csv `
   --prompt "Compare production and cost by region, identify drivers, forecast and recommend priorities" `
-  --output outputs\sample
+  --output outputs\operations_review
 ```
 
-Add `--hyper --public-bundle` after installing the Tableau optional dependencies.
+## Output package
 
-## Tableau Cloud and Tableau Server
+```text
+outputs/operations_review/
+├── analysis_plan.json
+├── findings.json
+├── dashboard.html
+├── tables/
+│   ├── profile.csv
+│   ├── correlations.csv
+│   ├── feature_importance.csv
+│   ├── trend_forecast.csv
+│   └── prescriptive_ranking.csv
+├── static/                 # optional PNG output
+├── tableau/                # optional Hyper/publication package
+└── source_snapshot/        # when enabled by the user
+```
 
-PromptBI creates a Hyper data source and can publish it through Tableau's supported REST client.
-Use a Personal Access Token, not a hard-coded password. In the application, enter:
+## Tableau delivery
 
-- the Tableau Cloud pod or Tableau Server URL;
-- site content URL (blank for the default site);
-- project name;
-- PAT name and PAT secret; and
-- the published datasource name.
+- **Tableau Cloud/Server:** create a Hyper datasource and publish using a Personal Access Token held only in the current session.
+- **Tableau Public:** create a review package for manual opening and publication. Tableau Public makes the workbook and underlying data public, so confidential data must not be included.
+- **No Tableau license:** use the interactive `dashboard.html` and exported analysis tables.
 
-The secret is held in the running Streamlit session and is not written by this application.
-Publishing still requires the Tableau permissions assigned to that token's user.
-
-To publish a workbook, create/review the workbook in Tableau Desktop, package local resources as
-`.twbx`, and call `promptbi.tableau.publish_to_cloud_or_server(..., kind="workbook")`.
-
-## Tableau Public
-
-Tableau Public content and its underlying data are public. PromptBI therefore creates a review
-package instead of transmitting data to an undocumented endpoint. Review the package, open its
-CSV or Hyper file in Tableau Public Edition, create/review the workbook, and use
-**Server > Tableau Public > Save to Tableau Public**.
-
-Do not use Tableau Public for confidential, personal, licensed, security-sensitive, commercially
-sensitive, or employer/client data.
-
-## Live data
-
-The current input adapters read files. A live source can be added safely by implementing a loader
-that returns a pandas DataFrame, then scheduling the CLI and publishing the refreshed Hyper
-datasource to Tableau Cloud/Server. Keep database and API credentials outside source control.
-
-## Tests
+## Verification
 
 ```powershell
 $env:PYTHONPATH = (Resolve-Path .\src).Path
 python -m unittest discover -s tests -v
 ```
 
-## Analytical limits
+The validation run completed **6 tests successfully**. One optional predictive test is skipped when scikit-learn is not installed in the validation interpreter; scikit-learn is declared in the predictive dependency set.
 
-This is an engineering-grade starting platform, not an autonomous decision authority. “Any
-visualization” means the supported chart catalog or a developer-added Plotly component. Causal,
-forecast, optimization, safety, financial, medical, and engineering conclusions require suitable
-data, domain assumptions, uncertainty treatment, validation, and accountable human approval.
+## What I would build next
 
-The deterministic planner is reliable for common requests and exact column names. The optional
-LLM planner improves language flexibility but can still make mistakes; plan validation prevents it
-from inventing dataset columns, and the user reviews the JSON before analysis.
+- Add governed connectors for SQL Server, PostgreSQL, Snowflake and REST APIs.
+- Add scheduled refresh with dataset versioning and row-count checks.
+- Add constraint-based optimization rather than observed-data ranking alone.
+- Add forecasting backtests, prediction intervals and model comparison.
+- Add dashboard themes and automatic mobile layouts.
+- Add a workbook template layer for faster Tableau handoff.
+- Add role-based approval and a signed run manifest for enterprise use.
 
-## Official Tableau interfaces used
+## Analytical boundary
 
-- Tableau Hyper API for local extracts.
-- Tableau Server Client / REST API for licensed Cloud or Server publishing.
-- Tableau Public's documented Desktop/Public Edition save workflow.
+The application accelerates analysis; it does not turn weak data into a reliable decision. Forecasts, causal claims, safety decisions, financial recommendations and engineering actions still require suitable data, uncertainty treatment, domain assumptions and accountable review.
+
