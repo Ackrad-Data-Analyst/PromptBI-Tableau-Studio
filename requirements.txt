@@ -1,0 +1,5 @@
+-e .
+tableauhyperapi>=0.0.21400
+tableauserverclient>=0.35
+kaleido>=0.2.1
+
