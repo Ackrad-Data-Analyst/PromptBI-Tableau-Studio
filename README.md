@@ -135,7 +135,7 @@ write_dashboard(
 - NumPy and scikit-learn for diagnostic/predictive modules
 - Tableau Hyper API for extract creation
 - Tableau Server Client/REST API for licensed Cloud or Server publication
-- Deterministic offline planner with an optional OpenAI-compatible language-planning adapter
+- Deterministic offline planner with an optional configurable language-planning adapter
 - JSON plans, CSV analysis tables and self-contained HTML output
 - PyArrow/openpyxl adapters for Parquet and Excel workflows
 
@@ -209,4 +209,3 @@ The validation run completed **6 tests successfully**. One optional predictive t
 ## Analytical boundary
 
 The application accelerates analysis; it does not turn weak data into a reliable decision. Forecasts, causal claims, safety decisions, financial recommendations and engineering actions still require suitable data, uncertainty treatment, domain assumptions and accountable review.
-
